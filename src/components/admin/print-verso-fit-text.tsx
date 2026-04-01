@@ -8,12 +8,12 @@ import {
   useState,
 } from "react";
 
-/** Taille de base max (px) avant réduction ; le titre est ~1.35× cette valeur. */
-const MAX_BASE_PX = 30;
-const MIN_BASE_PX = 7;
+/** Base max (px) pour le verso ; adapté au format 63×88 mm une fois imprimé. */
+const MAX_BASE_PX = 17;
+const MIN_BASE_PX = 5;
 const FIT_ITERATIONS = 24;
 /** Marge sous la hauteur utile (arrondis, descendants, gap). */
-const HEIGHT_EPS_PX = 6;
+const HEIGHT_EPS_PX = 5;
 
 type PrintVersoFitTextProps = {
   title: string;
@@ -23,7 +23,7 @@ type PrintVersoFitTextProps = {
 
 /**
  * Typo la plus grande possible : on part du max et on réduit jusqu’à ce que
- * titre + artiste + date tiennent dans le carré (hauteur du panneau).
+ * titre + artiste + date tiennent dans le panneau (hauteur utile).
  */
 export function PrintVersoFitText({
   title,
@@ -104,17 +104,17 @@ export function PrintVersoFitText({
     >
       <div
         ref={blockRef}
-        className="flex w-full min-w-0 flex-col items-center justify-center gap-[0.42em] text-center"
+        className="flex w-full min-w-0 flex-col items-center justify-center gap-[0.38em] text-center"
         style={{ fontSize: `${basePx}px` }}
       >
-        <p className="w-full min-w-0 hyphens-auto break-words font-semibold leading-[1.15] [font-size:1.35em]">
+        <p className="w-full min-w-0 hyphens-auto break-words font-semibold leading-[1.12] [font-size:1.2em]">
           {title}
         </p>
-        <p className="w-full min-w-0 hyphens-auto break-words leading-[1.15] text-muted-foreground [font-size:1em]">
+        <p className="w-full min-w-0 hyphens-auto break-words leading-[1.12] text-muted-foreground [font-size:1em]">
           {artist}
         </p>
         {releaseLine ? (
-          <p className="mt-[0.2em] shrink-0 leading-tight text-muted-foreground [font-size:0.88em]">
+          <p className="mt-[0.15em] shrink-0 leading-tight text-muted-foreground [font-size:0.8em]">
             {releaseLine}
           </p>
         ) : null}
