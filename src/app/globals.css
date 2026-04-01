@@ -146,4 +146,8 @@
     display: grid !important;
     gap: 10mm !important;
   }
+  .print-grid > * {
+    min-width: 0 !important;
+    max-width: 100% !important;
+  }
 }

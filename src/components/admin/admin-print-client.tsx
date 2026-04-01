@@ -2,6 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { Card } from "@/types/card";
+import { formatReleaseDdMmYyyy } from "@/lib/format-release-display";
+import { PrintVersoFitText } from "@/components/admin/print-verso-fit-text";
 import { QrDisplay } from "@/components/qr/qr-display";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
@@ -41,8 +43,8 @@ export function AdminPrintClient() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Impression</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Aperçu avant impression (plusieurs QR par page). Utilise Ctrl+P /
-            Cmd+P.
+            Chaque carte : recto (QR) et verso (titre, artiste, date). Utilise
+            Ctrl+P / Cmd+P.
           </p>
         </div>
         <div className="flex flex-wrap items-center gap-2">
@@ -78,22 +80,47 @@ export function AdminPrintClient() {
       </div>
 
       <div
-        className="print-grid grid grid-cols-2 gap-8 sm:grid-cols-3 md:grid-cols-4"
+        className="print-grid grid grid-cols-1 gap-10 sm:grid-cols-2 lg:grid-cols-2 xl:grid-cols-3"
         data-label={labelMode}
       >
-        {cards.map((c) => (
-          <figure
-            key={c.id}
-            className="flex flex-col items-center break-inside-avoid rounded-2xl border border-dashed p-4 text-center print:border print:border-neutral-300 print:shadow-none"
-          >
-            <QrDisplay value={c.qr_url} size={140} className="rounded-xl" />
-            {labelMode === "title" ? (
-              <figcaption className="mt-3 max-w-[160px] text-xs leading-snug">
-                <span className="block font-medium">{c.title}</span>
-              </figcaption>
-            ) : null}
-          </figure>
-        ))}
+        {cards.map((c) => {
+          const releaseLine = formatReleaseDdMmYyyy(
+            c.release_date,
+            c.release_year,
+          );
+          const panelSquare =
+            "aspect-square min-h-0 w-full max-w-full overflow-hidden [container-type:size] flex flex-col items-center justify-center rounded-2xl border border-dashed p-2 text-center print:border print:border-neutral-300 print:shadow-none sm:p-3";
+          const qrSize = labelMode === "title" ? 158 : 192;
+          return (
+            <div
+              key={c.id}
+              className="min-w-0 w-full max-w-full break-inside-avoid"
+            >
+              <div className="grid w-full min-w-0 grid-cols-2 items-start gap-3 [grid-template-columns:repeat(2,minmax(0,1fr))] sm:gap-4">
+                <figure className={`${panelSquare} gap-1 sm:gap-2`}>
+                  <QrDisplay
+                    value={c.qr_url}
+                    size={qrSize}
+                    className="max-h-[78%] max-w-[78%] shrink-0 rounded-xl object-contain"
+                  />
+                  {labelMode === "title" ? (
+                    <figcaption className="line-clamp-3 max-w-[95%] min-w-0 px-0.5 font-medium leading-tight [font-size:clamp(0.7rem,11cqw,1.125rem)]">
+                      {c.title}
+                    </figcaption>
+                  ) : null}
+                </figure>
+                <div className={panelSquare} aria-label="Verso carte">
+                  <PrintVersoFitText
+                    key={c.id}
+                    title={c.title}
+                    artist={c.artist_name}
+                    releaseLine={releaseLine}
+                  />
+                </div>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );
