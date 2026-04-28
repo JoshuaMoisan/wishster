@@ -5,6 +5,6 @@ export const SPOTIFY_API = "https://api.spotify.com/v1";
 export function defaultScopes(): string {
   return (
     process.env.SPOTIFY_SCOPES ??
-    "streaming user-read-playback-state user-modify-playback-state user-read-email user-read-private"
+    "streaming user-read-playback-state user-modify-playback-state user-read-email user-read-private playlist-read-private"
   );
 }

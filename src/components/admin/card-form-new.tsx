@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { spotifyLoginUrl } from "@/lib/spotify-login-url";
 import { extractSpotifyTrackId } from "@/lib/spotify/parse-track";
+import { extractSpotifyPlaylistId } from "@/lib/spotify/parse-playlist";
 import type { MappedTrack } from "@/lib/spotify/map-track";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,24 +19,37 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Separator } from "@/components/ui/separator";
 import { toast } from "sonner";
+
 const loginReturn = "/admin/cards/new";
+
+type CreationMode = "single" | "playlist";
 
 export function CardFormNew() {
   const router = useRouter();
+  const [creationMode, setCreationMode] = useState<CreationMode>("single");
+
   const [inputTitle, setInputTitle] = useState("");
   const [inputArtist, setInputArtist] = useState("");
-  const [spotifyUrl, setSpotifyUrl] = useState("");
+  const [trackUrl, setTrackUrl] = useState("");
   const [searchQ, setSearchQ] = useState("");
   const [results, setResults] = useState<MappedTrack[]>([]);
   const [selected, setSelected] = useState<MappedTrack | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const [playlistUrl, setPlaylistUrl] = useState("");
+  const [playlistMeta, setPlaylistMeta] = useState<{
+    id: string;
+    name: string;
+    tracks_total: number;
+    owner_display_name: string | null;
+  } | null>(null);
+
   async function searchSpotify() {
     const q = searchQ.trim() || `${inputTitle} ${inputArtist}`.trim();
     if (!q) {
-      toast.error("Saisis une recherche ou un titre");
+      toast.error("Saisis une recherche ou remplis titre / artiste ci‑dessous");
       return;
     }
     setLoading(true);
@@ -59,10 +73,10 @@ export function CardFormNew() {
     }
   }
 
-  async function loadFromUrl() {
-    const id = extractSpotifyTrackId(spotifyUrl);
+  async function loadTrackFromUrl() {
+    const id = extractSpotifyTrackId(trackUrl);
     if (!id) {
-      toast.error("Lien ou URI Spotify invalide");
+      toast.error("Colle un lien ou une URI de morceau Spotify (pas une playlist)");
       return;
     }
     setLoading(true);
@@ -78,8 +92,8 @@ export function CardFormNew() {
       if (!r.ok) throw new Error(j.error ?? "Erreur");
       if (j.track) {
         setSelected(j.track);
-        if (!inputTitle.trim()) setInputTitle(j.track.title);
-        if (!inputArtist.trim()) setInputArtist(j.track.artist_name);
+        setInputTitle(j.track.title);
+        setInputArtist(j.track.artist_name);
         toast.success("Morceau importé");
       }
     } catch (e) {
@@ -89,14 +103,21 @@ export function CardFormNew() {
     }
   }
 
-  async function onSubmit(e: React.FormEvent) {
+  function selectTrack(t: MappedTrack) {
+    setSelected(t);
+    setInputTitle(t.title);
+    setInputArtist(t.artist_name);
+    toast.message("Morceau sélectionné");
+  }
+
+  async function onSubmitSingle(e: React.FormEvent) {
     e.preventDefault();
     if (!selected) {
-      toast.error("Choisis un morceau Spotify");
+      toast.error("Choisis ou importe un morceau Spotify");
       return;
     }
     if (!inputTitle.trim()) {
-      toast.error("Le titre saisi est requis");
+      toast.error("Le titre affiché sur la carte est requis");
       return;
     }
     setLoading(true);
@@ -118,10 +139,91 @@ export function CardFormNew() {
           duration_ms: selected.duration_ms,
         }),
       });
-      const j = (await r.json()) as { card?: { id: string; slug: string }; error?: string };
+      const j = (await r.json()) as {
+        card?: { id: string; slug: string };
+        error?: string;
+      };
       if (!r.ok) throw new Error(j.error ?? "Création impossible");
       toast.success("Carte créée");
       router.replace(`/admin/cards/${j.card!.id}`);
+      router.refresh();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Erreur");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function previewPlaylist() {
+    const id = extractSpotifyPlaylistId(playlistUrl);
+    if (!id) {
+      toast.error("Lien ou URI de playlist Spotify invalide");
+      setPlaylistMeta(null);
+      return;
+    }
+    setLoading(true);
+    setPlaylistMeta(null);
+    try {
+      const r = await fetch(`/api/spotify/playlists/${encodeURIComponent(id)}`, {
+        credentials: "include",
+      });
+      const j = (await r.json()) as {
+        id?: string;
+        name?: string;
+        tracks_total?: number;
+        owner_display_name?: string | null;
+        error?: string;
+      };
+      if (r.status === 401) {
+        toast.error("Connecte-toi à Spotify");
+        return;
+      }
+      if (!r.ok) throw new Error(j.error ?? "Playlist introuvable");
+      setPlaylistMeta({
+        id: j.id!,
+        name: j.name ?? "Playlist",
+        tracks_total: j.tracks_total ?? 0,
+        owner_display_name: j.owner_display_name ?? null,
+      });
+      toast.success("Playlist reconnue");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Lecture impossible");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function importPlaylist() {
+    if (!playlistUrl.trim()) {
+      toast.error("Colle d’abord le lien de la playlist");
+      return;
+    }
+    setLoading(true);
+    try {
+      const r = await fetch("/api/admin/cards/from-playlist", {
+        method: "POST",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ playlist_url: playlistUrl.trim() }),
+      });
+      const j = (await r.json()) as {
+        created?: number;
+        attempted?: number;
+        errors?: string[];
+        error?: string;
+      };
+      if (r.status === 401) {
+        toast.error("Session admin ou Spotify expirée");
+        return;
+      }
+      if (!r.ok) throw new Error(j.error ?? "Import impossible");
+      const n = j.created ?? 0;
+      const att = j.attempted ?? 0;
+      toast.success(`${n} carte${n > 1 ? "s" : ""} créée${n > 1 ? "s" : ""} sur ${att} morceau${att > 1 ? "x" : ""}`);
+      if (j.errors?.length) {
+        toast.message(j.errors.slice(0, 3).join(" · "));
+      }
+      router.replace("/admin/cards");
       router.refresh();
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Erreur");
@@ -135,8 +237,7 @@ export function CardFormNew() {
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Nouvelle carte</h1>
         <p className="mt-2 text-sm text-muted-foreground">
-          Connecte-toi à Spotify depuis l’accueil pour la recherche et
-          l’import.{" "}
+          Connecte-toi à Spotify pour accéder aux morceaux et aux playlists.{" "}
           <a
             className="underline underline-offset-4"
             href={spotifyLoginUrl(loginReturn)}
@@ -146,148 +247,270 @@ export function CardFormNew() {
         </p>
       </div>
 
-      <form onSubmit={onSubmit} className="space-y-8">
+      <div
+        className="flex w-full max-w-md rounded-xl border bg-muted/40 p-1"
+        role="tablist"
+        aria-label="Mode de création"
+      >
+        <button
+          type="button"
+          role="tab"
+          aria-selected={creationMode === "single"}
+          className={cn(
+            "flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            creationMode === "single"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => setCreationMode("single")}
+        >
+          Une carte
+        </button>
+        <button
+          type="button"
+          role="tab"
+          aria-selected={creationMode === "playlist"}
+          className={cn(
+            "flex-1 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+            creationMode === "playlist"
+              ? "bg-background text-foreground shadow-sm"
+              : "text-muted-foreground hover:text-foreground",
+          )}
+          onClick={() => {
+            setCreationMode("playlist");
+            setPlaylistMeta(null);
+          }}
+        >
+          Depuis une playlist
+        </button>
+      </div>
+
+      {creationMode === "playlist" ? (
         <Card className="rounded-2xl border shadow-sm">
           <CardHeader>
-            <CardTitle>Infos carte</CardTitle>
+            <CardTitle>Import playlist</CardTitle>
             <CardDescription>
-              Le titre saisi sert de référence ; les métadonnées officielles
-              viennent de Spotify.
+              Une carte est créée par morceau Spotify (fichiers locaux et
+              épisodes exclus). Les playlists privées nécessitent le droit
+              « playlist » sur Spotify — reconnecte-toi si besoin.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="in-title">Titre (manuel)</Label>
-              <Input
-                id="in-title"
-                value={inputTitle}
-                onChange={(e) => setInputTitle(e.target.value)}
-                className="rounded-xl"
-                required
+              <Label htmlFor="pl-url">Lien ou URI de la playlist</Label>
+              <Textarea
+                id="pl-url"
+                placeholder="https://open.spotify.com/playlist/… ou spotify:playlist:…"
+                value={playlistUrl}
+                onChange={(e) => {
+                  setPlaylistUrl(e.target.value);
+                  setPlaylistMeta(null);
+                }}
+                className="min-h-[88px] rounded-xl"
               />
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="in-art">Artiste (optionnel)</Label>
-              <Input
-                id="in-art"
-                value={inputArtist}
-                onChange={(e) => setInputArtist(e.target.value)}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                type="button"
+                variant="secondary"
                 className="rounded-xl"
-              />
+                disabled={loading}
+                onClick={() => void previewPlaylist()}
+              >
+                Vérifier la playlist
+              </Button>
+              <Button
+                type="button"
+                className="rounded-xl"
+                disabled={loading || !playlistUrl.trim()}
+                onClick={() => void importPlaylist()}
+              >
+                {loading ? "Import…" : "Créer toutes les cartes"}
+              </Button>
             </div>
+            {playlistMeta ? (
+              <div className="rounded-xl border bg-muted/30 px-4 py-3 text-sm">
+                <p className="font-medium">{playlistMeta.name}</p>
+                <p className="mt-1 text-muted-foreground">
+                  {playlistMeta.tracks_total} titre
+                  {playlistMeta.tracks_total > 1 ? "s" : ""} indiqué
+                  {playlistMeta.tracks_total > 1 ? "s" : ""} par Spotify
+                  {playlistMeta.owner_display_name
+                    ? ` · par ${playlistMeta.owner_display_name}`
+                    : ""}
+                </p>
+              </div>
+            ) : null}
           </CardContent>
         </Card>
-
-        <Tabs defaultValue="search" className="w-full">
-          <TabsList className="grid w-full grid-cols-2 rounded-xl">
-            <TabsTrigger value="search" className="rounded-lg">
-              Recherche Spotify
-            </TabsTrigger>
-            <TabsTrigger value="url" className="rounded-lg">
-              Lien / URI
-            </TabsTrigger>
-          </TabsList>
-          <TabsContent value="search" className="mt-4 space-y-4">
-            <div className="flex flex-col gap-2 sm:flex-row">
-              <Input
-                placeholder="Recherche (ou laisse vide pour titre + artiste)"
-                value={searchQ}
-                onChange={(e) => setSearchQ(e.target.value)}
-                className="rounded-xl"
-              />
-              <button
-                type="button"
-                className={cn(
-                  buttonVariants({ variant: "secondary", size: "default" }),
-                  "rounded-xl",
-                )}
-                disabled={loading}
-                onClick={() => void searchSpotify()}
-              >
-                Rechercher
-              </button>
-            </div>
-            <ul className="max-h-72 space-y-2 overflow-auto rounded-xl border p-2">
-              {results.map((t) => (
-                <li key={t.spotify_track_id}>
-                  <button
-                    type="button"
-                    className="w-full rounded-lg px-3 py-2 text-left text-sm hover:bg-muted"
-                    onClick={() => {
-                      setSelected(t);
-                      toast.message("Morceau sélectionné");
-                    }}
-                  >
-                    <span className="font-medium">{t.title}</span>
-                    <span className="block text-muted-foreground">
-                      {t.artist_name}
-                    </span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </TabsContent>
-          <TabsContent value="url" className="mt-4 space-y-4">
-            <Textarea
-              placeholder="https://open.spotify.com/track/… ou spotify:track:…"
-              value={spotifyUrl}
-              onChange={(e) => setSpotifyUrl(e.target.value)}
-              className="min-h-[100px] rounded-xl"
-            />
-            <button
-              type="button"
-              className={cn(
-                buttonVariants({ variant: "secondary", size: "default" }),
-                "rounded-xl",
-              )}
-              disabled={loading}
-              onClick={() => void loadFromUrl()}
-            >
-              Charger le morceau
-            </button>
-          </TabsContent>
-        </Tabs>
-
-        {selected ? (
+      ) : (
+        <form onSubmit={onSubmitSingle} className="space-y-8">
           <Card className="rounded-2xl border shadow-sm">
             <CardHeader>
-              <CardTitle>Morceau retenu</CardTitle>
+              <CardTitle>1. Morceau Spotify</CardTitle>
               <CardDescription>
-                Ces champs seront enregistrés avec la carte.
+                Importe un lien ou recherche, puis sélectionne le bon résultat.
               </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-2 text-sm">
-              <p>
-                <span className="text-muted-foreground">Titre :</span>{" "}
-                {selected.title}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Artiste :</span>{" "}
-                {selected.artist_name}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Album :</span>{" "}
-                {selected.album_name ?? "—"}
-              </p>
-              <p>
-                <span className="text-muted-foreground">Sortie :</span>{" "}
-                {selected.release_date ?? "—"}
-              </p>
-              <p className="font-mono text-xs text-muted-foreground">
-                {selected.spotify_uri}
-              </p>
+            <CardContent className="space-y-6">
+              <div className="space-y-2">
+                <Label htmlFor="track-url">Lien ou URI du morceau</Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="track-url"
+                    placeholder="https://open.spotify.com/track/…"
+                    value={trackUrl}
+                    onChange={(e) => setTrackUrl(e.target.value)}
+                    className="rounded-xl sm:flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-xl sm:shrink-0"
+                    disabled={loading}
+                    onClick={() => void loadTrackFromUrl()}
+                  >
+                    Importer
+                  </Button>
+                </div>
+              </div>
+
+              <div className="relative py-2">
+                <Separator />
+                <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-2 text-xs text-muted-foreground">
+                  ou recherche
+                </span>
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="search-q">Recherche Spotify</Label>
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    id="search-q"
+                    placeholder="Titre, artiste, mots-clés…"
+                    value={searchQ}
+                    onChange={(e) => setSearchQ(e.target.value)}
+                    className="rounded-xl sm:flex-1"
+                  />
+                  <Button
+                    type="button"
+                    variant="secondary"
+                    className="rounded-xl sm:shrink-0"
+                    disabled={loading}
+                    onClick={() => void searchSpotify()}
+                  >
+                    Rechercher
+                  </Button>
+                </div>
+              </div>
+
+              <ul className="max-h-64 space-y-1 overflow-auto rounded-xl border p-2">
+                {results.map((t) => (
+                  <li key={t.spotify_track_id}>
+                    <button
+                      type="button"
+                      className={cn(
+                        "w-full rounded-lg px-3 py-2.5 text-left text-sm transition-colors",
+                        selected?.spotify_track_id === t.spotify_track_id
+                          ? "bg-primary/10 ring-1 ring-primary/30"
+                          : "hover:bg-muted",
+                      )}
+                      onClick={() => selectTrack(t)}
+                    >
+                      <span className="font-medium">{t.title}</span>
+                      <span className="mt-0.5 block text-muted-foreground">
+                        {t.artist_name}
+                      </span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
             </CardContent>
           </Card>
-        ) : null}
 
+          <Card className="rounded-2xl border shadow-sm">
+            <CardHeader>
+              <CardTitle>2. Libellés sur la carte</CardTitle>
+              <CardDescription>
+                Texte de référence pour toi et pour l’impression ; les données
+                de lecture viennent toujours de Spotify.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <Label htmlFor="in-title">Titre affiché</Label>
+                <Input
+                  id="in-title"
+                  value={inputTitle}
+                  onChange={(e) => setInputTitle(e.target.value)}
+                  className="rounded-xl"
+                  required
+                />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="in-art">Artiste (optionnel)</Label>
+                <Input
+                  id="in-art"
+                  value={inputArtist}
+                  onChange={(e) => setInputArtist(e.target.value)}
+                  className="rounded-xl"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {selected ? (
+            <Card className="rounded-2xl border border-dashed bg-muted/20 shadow-sm">
+              <CardHeader className="pb-2">
+                <CardTitle className="text-base">Morceau retenu</CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-1.5 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Titre Spotify :</span>{" "}
+                  {selected.title}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Artiste :</span>{" "}
+                  {selected.artist_name}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Album :</span>{" "}
+                  {selected.album_name ?? "—"}
+                </p>
+                <p className="font-mono text-xs text-muted-foreground break-all">
+                  {selected.spotify_uri}
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              Aucun morceau sélectionné pour l’instant.
+            </p>
+          )}
+
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="submit"
+              className="rounded-xl"
+              disabled={loading || !selected}
+            >
+              {loading ? "Enregistrement…" : "Créer la carte"}
+            </Button>
+            <Link
+              href="/admin/cards"
+              className={cn(
+                buttonVariants({ variant: "outline", size: "default" }),
+                "inline-flex rounded-xl",
+              )}
+            >
+              Annuler
+            </Link>
+          </div>
+        </form>
+      )}
+
+      {creationMode === "playlist" ? (
         <div className="flex flex-wrap gap-3">
-          <button
-            type="submit"
-            className={cn(buttonVariants({ size: "default" }), "rounded-xl")}
-            disabled={loading}
-          >
-            {loading ? "Enregistrement…" : "Enregistrer la carte"}
-          </button>
           <Link
             href="/admin/cards"
             className={cn(
@@ -295,10 +518,10 @@ export function CardFormNew() {
               "inline-flex rounded-xl",
             )}
           >
-            Annuler
+            Retour aux cartes
           </Link>
         </div>
-      </form>
+      ) : null}
     </div>
   );
 }
