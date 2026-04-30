@@ -40,10 +40,6 @@ export function AdminPrintClient() {
     void load();
   }, [load]);
 
-  if (loading) {
-    return <p className="text-muted-foreground">Chargement…</p>;
-  }
-
   const printSheets = useMemo(() => {
     const out: Card[][] = [];
     for (let i = 0; i < cards.length; i += PAIRS_PER_PRINT_SHEET) {
@@ -51,6 +47,10 @@ export function AdminPrintClient() {
     }
     return out;
   }, [cards]);
+
+  if (loading) {
+    return <p className="text-muted-foreground">Chargement…</p>;
+  }
 
   return (
     <div>
