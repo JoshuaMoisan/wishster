@@ -133,25 +133,43 @@
 
 @media print {
   @page {
-    margin: 10mm;
+    /* Marges minimales : max. de hauteur pour 3 × 88 mm sur A4 (297 mm). */
+    margin: 0;
     size: A4;
   }
   .no-print {
     display: none !important;
   }
+  html,
   body {
+    margin: 0 !important;
+    padding: 0 !important;
     background: white !important;
     color: black !important;
   }
+  /* Une colonne de feuilles ; chaque feuille = jusqu’à 3 paires recto/verso. */
   .print-grid {
-    display: grid !important;
-    grid-template-columns: 1fr !important;
-    gap: 8mm !important;
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 0 !important;
   }
-  /* Ne pas laisser max-w-full / minmax réduire les faces en mm. */
   .print-grid > * {
     min-width: 0 !important;
     max-width: none !important;
+  }
+  .print-sheet {
+    display: flex !important;
+    flex-direction: column !important;
+    align-items: center !important;
+    gap: 0 !important;
+    width: 100% !important;
+    break-inside: avoid !important;
+    page-break-inside: avoid !important;
+    page-break-after: always !important;
+  }
+  .print-sheet:last-child {
+    page-break-after: auto !important;
   }
   /*
    * Chaque face = exactement 63 mm × 88 mm (hors fond perdu ; bordure incluse
@@ -160,7 +178,7 @@
   .print-card-pair {
     display: grid !important;
     grid-template-columns: 63mm 63mm !important;
-    column-gap: 4mm !important;
+    column-gap: 0 !important;
     justify-content: center !important;
     justify-items: center !important;
     width: fit-content !important;
@@ -179,7 +197,7 @@
     flex-shrink: 0 !important;
     box-sizing: border-box !important;
     aspect-ratio: unset !important;
-    padding: 2mm !important;
+    padding: 1mm !important;
     overflow: hidden !important;
   }
 }
