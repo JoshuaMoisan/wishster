@@ -3,6 +3,39 @@ import { readSpotifyFromRequest } from "@/lib/spotify/cookies";
 import { getValidAccessToken } from "@/lib/spotify/token";
 import { attachSpotifyTokensIfNeeded } from "@/lib/spotify/attach-tokens";
 
+function spotifyApiErrorMessage(status: number, bodyText: string): string {
+  let apiMessage = "";
+  try {
+    const j = JSON.parse(bodyText) as {
+      error?: { message?: string; reason?: string };
+    };
+    apiMessage = (j.error?.message || j.error?.reason || "").trim();
+  } catch {
+    /* ignore */
+  }
+  const hint = `${apiMessage} ${bodyText}`.toLowerCase();
+
+  if (status === 404) {
+    return "Spotify ne trouve pas le lecteur de cette page. Réessaie dans quelques secondes ou recharge l’onglet.";
+  }
+  if (status === 403) {
+    if (/premium|subscription|restriction/i.test(hint)) {
+      return "Spotify refuse la lecture : compte Premium requis ou morceau restreint pour ce compte.";
+    }
+    return "Spotify refuse la lecture (droits ou restrictions sur ce morceau).";
+  }
+  if (status === 401) {
+    return "Session Spotify expirée : reconnecte-toi puis réessaie.";
+  }
+  if (status === 429) {
+    return "Trop de demandes Spotify : patiente une minute puis réessaie.";
+  }
+  if (apiMessage) {
+    return `Spotify : ${apiMessage}`;
+  }
+  return `La lecture a échoué (erreur ${status}). Réessaie ou ouvre le morceau dans l’app Spotify.`;
+}
+
 export async function POST(req: Request) {
   let body: { deviceId?: string; uri?: string; access_token?: string };
   try {
@@ -50,8 +83,10 @@ export async function POST(req: Request) {
   if (!transfer.ok && transfer.status !== 204) {
     const t = await transfer.text();
     return NextResponse.json(
-      { error: `Transfert impossible: ${transfer.status} ${t}` },
-      { status: 502 },
+      {
+        error: spotifyApiErrorMessage(transfer.status, t),
+      },
+      { status: transfer.status >= 400 && transfer.status < 600 ? transfer.status : 502 },
     );
   }
 
@@ -72,8 +107,8 @@ export async function POST(req: Request) {
   if (!play.ok && play.status !== 204) {
     const t = await play.text();
     return NextResponse.json(
-      { error: `Lecture impossible: ${play.status} ${t}` },
-      { status: 502 },
+      { error: spotifyApiErrorMessage(play.status, t) },
+      { status: play.status >= 400 && play.status < 600 ? play.status : 502 },
     );
   }
 

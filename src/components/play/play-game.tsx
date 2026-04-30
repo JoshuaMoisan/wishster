@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useSpotifyWebPlayer } from "@/hooks/use-spotify-web-player";
 import type { CardReveal } from "@/types/card";
-import { buttonVariants } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
   Card,
@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/card";
 import { spotifyLoginUrl } from "@/lib/spotify-login-url";
 import { formatReleaseDdMmYyyy } from "@/lib/format-release-display";
-import { Loader2 } from "lucide-react";
+import {
+  explainPlaybackFailure,
+  spotifyWebOpenUrl,
+} from "@/lib/playback-user-message";
+import { AlertTriangle, Loader2 } from "lucide-react";
 
 type Props = {
   slug: string;
@@ -166,6 +170,14 @@ export function PlayGame({ slug, spotifyUri, durationMs }: Props) {
     ? formatReleaseDdMmYyyy(revealData.release_date, revealData.release_year)
     : null;
 
+  const playbackRaw = [playerError, msg]
+    .filter((s): s is string => Boolean(s?.trim()))
+    .join("\n");
+  const playbackExplain = playbackRaw
+    ? explainPlaybackFailure(playbackRaw)
+    : null;
+  const openSpotifyHref = spotifyWebOpenUrl(spotifyUri);
+
   return (
     <div className="mx-auto flex min-h-[70vh] max-w-lg flex-col justify-center gap-6 px-4 py-12">
       <div className="text-center">
@@ -315,11 +327,50 @@ export function PlayGame({ slug, spotifyUri, durationMs }: Props) {
         </>
       )}
 
-      {(playerError || msg) && (
-        <p className="text-center text-sm text-destructive">
-          {playerError || msg}
-        </p>
-      )}
+      {playbackExplain ? (
+        <Card className="border-destructive/40 bg-destructive/5 shadow-sm dark:bg-destructive/10">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-start gap-2 text-left text-base text-destructive">
+              <AlertTriangle
+                className="mt-0.5 size-5 shrink-0"
+                aria-hidden
+              />
+              {playbackExplain.title}
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4 text-left text-sm leading-relaxed text-foreground">
+            <p className="text-muted-foreground">{playbackExplain.body}</p>
+            <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap">
+              {openSpotifyHref ? (
+                <a
+                  href={openSpotifyHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={cn(
+                    buttonVariants({ variant: "secondary", size: "default" }),
+                    "inline-flex justify-center rounded-xl",
+                  )}
+                >
+                  Ouvrir dans Spotify (app ou navigateur)
+                </a>
+              ) : null}
+              {session.connected ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-xl"
+                  onClick={() => {
+                    clearError();
+                    setMsg(null);
+                  }}
+                >
+                  Masquer ce message
+                </Button>
+              ) : null}
+            </div>
+          </CardContent>
+        </Card>
+      ) : null}
     </div>
   );
 }

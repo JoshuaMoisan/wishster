@@ -25,7 +25,11 @@ function loadSpotifyScript(): Promise<void> {
           resolve();
         } else if (Date.now() - t0 > 15000) {
           window.clearInterval(id);
-          reject(new Error("Timeout SDK Spotify"));
+          reject(
+            new Error(
+              "Le lecteur Spotify met trop longtemps à se charger. Rafraîchis la page.",
+            ),
+          );
         }
       }, 50);
       return;
@@ -37,7 +41,12 @@ function loadSpotifyScript(): Promise<void> {
     s.src = "https://sdk.scdn.co/spotify-player.js";
     s.async = true;
     s.setAttribute("data-wishster-spotify-sdk", "1");
-    s.onerror = () => reject(new Error("Chargement SDK échoué"));
+    s.onerror = () =>
+      reject(
+        new Error(
+          "Impossible de charger le lecteur Spotify (script bloqué ou hors ligne). Vérifie ta connexion et les bloqueurs de contenu.",
+        ),
+      );
     document.body.appendChild(s);
   });
 }
@@ -117,7 +126,11 @@ export function useSpotifyWebPlayer() {
 
     await new Promise<void>((resolve, reject) => {
       const timer = window.setTimeout(() => {
-        reject(new Error("Délai dépassé pour le lecteur Spotify"));
+        reject(
+          new Error(
+            "Le lecteur Spotify ne répond pas à temps. Réessaie ou ouvre le morceau dans l’app Spotify.",
+          ),
+        );
       }, 25000);
 
       let settled = false;
@@ -136,11 +149,21 @@ export function useSpotifyWebPlayer() {
 
       player.addListener("initialization_error", (arg) => {
         const e = arg as { message?: string };
-        fail(String(e.message ?? "Erreur d’initialisation"));
+        fail(
+          String(
+            e.message ??
+              "Le lecteur Spotify n’a pas pu s’initialiser dans ce navigateur.",
+          ),
+        );
       });
       player.addListener("authentication_error", (arg) => {
         const e = arg as { message?: string };
-        fail(String(e.message ?? "Authentification Spotify refusée"));
+        fail(
+          String(
+            e.message ??
+              "Spotify a refusé l’authentification du lecteur : reconnecte-toi.",
+          ),
+        );
       });
       player.addListener("account_error", (arg) => {
         const e = arg as { message?: string };
@@ -151,7 +174,12 @@ export function useSpotifyWebPlayer() {
       });
       player.addListener("playback_error", (arg) => {
         const e = arg as { message?: string };
-        setError(String(e.message ?? "Erreur de lecture"));
+        const raw = String(e.message ?? "").trim();
+        setError(
+          raw
+            ? `Spotify : ${raw}`
+            : "La lecture s’est interrompue. Réessaie ou ouvre le morceau dans l’app Spotify (Premium requis dans le navigateur).",
+        );
       });
 
       player.addListener("ready", (arg) => {
@@ -172,25 +200,36 @@ export function useSpotifyWebPlayer() {
       });
 
       void player.connect().then((ok) => {
-        if (!ok) fail("Connexion au lecteur refusée");
+        if (!ok)
+          fail(
+            "Connexion au lecteur Spotify refusée. Réessaie ou recharge la page.",
+          );
       });
     });
   }, []);
 
   const playUri = useCallback(async (uri: string) => {
     const id = deviceIdRef.current;
-    if (!id) throw new Error("Lecteur non prêt");
+    if (!id)
+      throw new Error(
+        "Le lecteur du navigateur n’est pas prêt. Clique de nouveau sur « Lancer la musique » après quelques secondes.",
+      );
 
     async function fetchPlayerAccessToken(): Promise<string> {
       const tokenRes = await fetch("/api/spotify/player-token", {
         credentials: "include",
       });
       if (!tokenRes.ok) {
-        throw new Error("Reconnecte-toi à Spotify.");
+        throw new Error(
+          "Session Spotify expirée : reconnecte-toi à Spotify puis réessaie.",
+        );
       }
       const j = (await tokenRes.json()) as { access_token?: string };
       const at = j.access_token?.trim();
-      if (!at) throw new Error("Jeton Spotify indisponible.");
+      if (!at)
+        throw new Error(
+          "Impossible d’obtenir l’autorisation Spotify pour le lecteur. Reconnecte-toi.",
+        );
       return at;
     }
 
