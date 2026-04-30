@@ -112,21 +112,21 @@ export function AdminPrintClient() {
           </div>
         </div>
         <p className="mt-4 max-w-2xl text-sm text-muted-foreground">
-          Recto (QR) et verso (titre, artiste, date). Faces 63 × 88 mm, marges
-          page à 0 et paires jointives pour tenir {PAIRS_PER_PRINT_SHEET} paires
-          sur une A4. Impression à{" "}
+          Recto (QR) et verso (titre, artiste, date). Faces 63 × 88 mm ; marges
+          page légères en impression (un peu plus en haut). Objectif{" "}
+          {PAIRS_PER_PRINT_SHEET} paires sur une A4 à{" "}
           <span className="font-medium text-foreground">100 %</span>, sans
-          « Ajuster à la page », et si possible{" "}
-          <span className="font-medium text-foreground">
-            en-têtes / pieds désactivés
-          </span>{" "}
-          dans la boîte d’impression (sinon le navigateur mange de la hauteur).
-          Ctrl+P / Cmd+P.
+          « Ajuster à la page », en-têtes / pieds désactivés si possible. Sur
+          téléphone, l’aperçu et le PDF utilisent souvent une autre échelle ou
+          des marges pilote : les cartes peuvent sembler coupées alors que le
+          desktop est bon — vérifier l’échelle à 100 % ou imprimer depuis un
+          ordinateur. Ctrl+P / Cmd+P.
         </p>
       </div>
 
+      <div className="-mx-4 overflow-x-auto px-4 sm:mx-0 sm:overflow-visible sm:px-0 print:mx-0 print:overflow-visible print:px-0">
       <div
-        className="print-grid grid grid-cols-1 gap-10 sm:grid-cols-2 sm:gap-8 lg:grid-cols-2 xl:grid-cols-3"
+        className="print-grid grid min-w-0 grid-cols-1 gap-10 sm:grid-cols-2 sm:gap-8 lg:grid-cols-2 xl:grid-cols-3"
         data-label={labelMode}
         data-date-format={dateFormat}
       >
@@ -176,6 +176,7 @@ export function AdminPrintClient() {
             })}
           </div>
         ))}
+      </div>
       </div>
     </div>
   );

@@ -133,8 +133,9 @@
 
 @media print {
   @page {
-    /* Marges minimales : max. de hauteur pour 3 × 88 mm sur A4 (297 mm). */
-    margin: 0;
+    /* Petit air en haut (et léger contour) : les moteurs d’impression mobile
+       appliquent souvent une zone non imprimable + échelle différente du desktop. */
+    margin: 4mm 3mm 3mm 3mm;
     size: A4;
   }
   .no-print {
